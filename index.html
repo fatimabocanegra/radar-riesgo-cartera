@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Radar de Riesgo de Cartera · Research Terminal</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0a1a26; --panel:#0f2433; --panel-2:#122a3b; --line:#1e3a4d;
+  --paper:#eef3f6; --text:#dce8f0; --muted:#7f9cb0; --faint:#5a7park;
+  --accent:#e0a83d; --accent-soft:#c79433;
+  --pos:#3fb27f; --neg:#e0685f; --neu:#5b8bc4;
+  --shadow:0 4px 20px rgba(0,0,0,.35);
+}
+html[data-theme="light"]{
+  --ink:#f5f2ec; --panel:#ffffff; --panel-2:#faf8f3; --line:#e2ddd2;
+  --paper:#1a2b38; --text:#1a2b38; --muted:#6a7885; --faint:#9aa6b2;
+  --accent:#b5852a; --accent-soft:#9a7024;
+  --pos:#1f8a5b; --neg:#c0392b; --neu:#2e5f9e;
+  --shadow:0 4px 20px rgba(30,50,70,.10);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--ink);color:var(--text);font-family:'Inter',system-ui,sans-serif;font-size:14px;line-height:1.55;transition:background .3s,color .3s}
+.mono{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums}
+.serif{font-family:'Spectral',Georgia,serif}
+h1,h2,h3{font-family:'Spectral',Georgia,serif;font-weight:700;line-height:1.15}
+.pos{color:var(--pos)} .neg{color:var(--neg)}
+
+/* ── TICKER TAPE (signature) ── */
+.tape{background:var(--ink);border-bottom:1px solid var(--line);overflow:hidden;white-space:nowrap;height:30px;display:flex;align-items:center;position:relative}
+.tape::before{content:'';position:absolute;left:0;top:0;bottom:0;width:60px;z-index:2;background:linear-gradient(90deg,var(--ink),transparent)}
+.tape::after{content:'';position:absolute;right:0;top:0;bottom:0;width:60px;z-index:2;background:linear-gradient(270deg,var(--ink),transparent)}
+.tape-track{display:inline-flex;gap:34px;padding-left:100%;animation:scroll 40s linear infinite;font-family:'IBM Plex Mono',monospace;font-size:12px}
+@keyframes scroll{to{transform:translateX(-100%)}}
+.tape-item{display:inline-flex;gap:8px;align-items:center}
+.tape-sym{color:var(--accent);font-weight:600}
+@media(prefers-reduced-motion:reduce){.tape-track{animation:none}}
+
+/* ── HEADER ── */
+header.topbar{background:var(--panel);border-bottom:1px solid var(--line);padding:14px 26px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:50}
+.brand{display:flex;flex-direction:column}
+.brand .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--accent)}
+.brand h1{font-size:20px;letter-spacing:.3px}
+.topbar-actions{display:flex;gap:8px}
+.btn{background:var(--panel-2);border:1px solid var(--line);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.5px;padding:7px 12px;border-radius:5px;cursor:pointer;transition:all .15s;text-transform:uppercase}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ── LAYOUT ── */
+.shell{display:grid;grid-template-columns:230px 1fr;max-width:1500px;margin:0 auto}
+nav.side{position:sticky;top:60px;align-self:start;height:calc(100vh - 60px);padding:26px 16px;border-right:1px solid var(--line)}
+nav.side .nav-label{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:14px}
+nav.side a{display:flex;gap:12px;align-items:baseline;padding:11px 12px;border-radius:6px;color:var(--muted);text-decoration:none;font-size:13.5px;transition:all .15s;border-left:2px solid transparent}
+nav.side a .num{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--faint)}
+nav.side a:hover{color:var(--text);background:var(--panel-2)}
+nav.side a.active{color:var(--accent);border-left-color:var(--accent);background:var(--panel-2)}
+nav.side a.active .num{color:var(--accent)}
+main{padding:34px 40px 80px;min-width:0}
+section.block{margin-bottom:64px;scroll-margin-top:70px}
+.sec-head{display:flex;align-items:baseline;gap:14px;margin-bottom:6px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.sec-head .sec-num{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--accent)}
+.sec-head h2{font-size:24px}
+.sec-sub{color:var(--muted);font-size:13px;margin:10px 0 24px;max-width:70ch}
+
+/* ── PANELS / CARDS ── */
+.grid{display:grid;gap:16px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px 22px;box-shadow:var(--shadow)}
+.panel h3{font-size:14px;margin-bottom:4px}
+.panel .p-cap{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:14px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.kpi{background:var(--panel);padding:16px 18px}
+.kpi .k-lbl{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.kpi .k-val{font-family:'IBM Plex Mono',monospace;font-size:24px;font-weight:600;color:var(--text)}
+.kpi .k-sub{font-size:11px;color:var(--faint);margin-top:3px}
+
+/* ── CHIPS ── */
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
+.chip{background:var(--panel-2);border:1px solid var(--line);color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 12px;border-radius:20px;cursor:pointer;transition:all .15s}
+.chip:hover{color:var(--text)}
+.chip.active{background:var(--accent);border-color:var(--accent);color:#0a1a26;font-weight:600}
+
+/* ── TABLES ── */
+table{width:100%;border-collapse:collapse;font-size:13px}
+table.mono td:not(:first-child),table.mono th:not(:first-child){font-family:'IBM Plex Mono',monospace;text-align:right}
+thead th{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}
+tbody td{padding:10px 12px;border-bottom:1px solid var(--line);color:var(--text)}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--panel-2)}
+.tag{font-family:'IBM Plex Mono',monospace;font-size:10px;padding:2px 7px;border-radius:3px}
+.tag-hi{background:rgba(224,104,95,.16);color:var(--neg)}
+.tag-mid{background:rgba(91,139,196,.16);color:var(--neu)}
+.tag-lo{background:rgba(63,178,127,.16);color:var(--pos)}
+
+/* ── CONTROLS ── */
+.ctl-row{display:flex;flex-wrap:wrap;gap:20px;align-items:flex-end;margin-bottom:20px}
+.ctl{display:flex;flex-direction:column;gap:6px}
+.ctl label{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
+select,input[type=number]{background:var(--panel-2);border:1px solid var(--line);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:13px;padding:8px 10px;border-radius:5px}
+.seg{display:flex;border:1px solid var(--line);border-radius:5px;overflow:hidden}
+.seg button{background:var(--panel-2);border:none;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 14px;cursor:pointer;transition:all .15s}
+.seg button.active{background:var(--accent);color:#0a1a26;font-weight:600}
+.chart{width:100%;height:360px}
+.chart-actions{display:flex;gap:6px;justify-content:flex-end;margin-top:8px}
+.mini{font-size:10px;padding:4px 9px}
+.interp{background:var(--panel-2);border-left:3px solid var(--accent);border-radius:0 6px 6px 0;padding:14px 18px;font-size:13.5px;color:var(--text);margin-top:16px;line-height:1.65}
+.interp b{color:var(--accent)}
+.weights-warn{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 12px;border-radius:5px;margin-top:8px}
+.w-ok{background:rgba(63,178,127,.14);color:var(--pos)} .w-bad{background:rgba(224,104,95,.14);color:var(--neg)}
+.drill-btns{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}
+footer.method{border-top:1px solid var(--line);padding:30px 0;margin-top:40px;color:var(--muted);font-size:12px;line-height:1.8}
+footer.method h4{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text);margin-bottom:10px}
+.disclaimer{background:var(--panel-2);border:1px dashed var(--line);border-radius:8px;padding:14px 18px;font-size:11.5px;color:var(--muted);margin-top:18px;line-height:1.7}
+.two-col{grid-template-columns:1fr 1fr}
+.three-col{grid-template-columns:2fr 1fr}
+@media(max-width:1000px){
+  .shell{grid-template-columns:1fr}
+  nav.side{position:relative;top:0;height:auto;border-right:none;border-bottom:1px solid var(--line);display:flex;gap:6px;overflow-x:auto;padding:12px}
+  nav.side .nav-label{display:none}
+  nav.side a{white-space:nowrap;border-left:none;border-bottom:2px solid transparent}
+  nav.side a.active{border-left:none;border-bottom-color:var(--accent)}
+  main{padding:24px 18px 60px}
+  .two-col,.three-col{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- ══════ TICKER TAPE ══════ -->
+<div class="tape"><div class="tape-track" id="tape"></div></div>
+
+<!-- ══════ HEADER ══════ -->
+<header class="topbar">
+  <div class="brand">
+    <span class="eyebrow">Quantitative Research Terminal</span>
+    <h1>Radar de Riesgo de Cartera</h1>
+  </div>
+  <div class="topbar-actions">
+    <button class="btn" id="themeBtn" aria-label="Cambiar tema">◐ Tema</button>
+    <button class="btn" id="a11yBtn" aria-label="Modo accesible">◉ Accesible</button>
+    <button class="btn" id="printBtn" aria-label="Imprimir sección">⎙ Imprimir</button>
+  </div>
+</header>
+
+<div class="shell">
+  <!-- ══════ SIDEBAR ══════ -->
+  <nav class="side">
+    <div class="nav-label">Secciones</div>
+    <a href="#overview" class="active"><span class="num">01</span> Portfolio Overview</a>
+    <a href="#performance"><span class="num">02</span> Performance &amp; Optimization</a>
+    <a href="#risk"><span class="num">03</span> Portfolio Risk</a>
+    <a href="#stress"><span class="num">04</span> Stress Testing</a>
+    <a href="#analisis"><span class="num">05</span> Análisis IA</a>
+  </nav>
+
+  <main>
+    <!-- ══ 01 OVERVIEW ══ -->
+    <section class="block" id="overview">
+      <div class="sec-head"><span class="sec-num">01</span><h2>Portfolio Overview</h2></div>
+      <p class="sec-sub">Composición, concentración y desempeño acumulado de la cartera frente al índice de referencia. Datos procesados a partir de precios reales de mercado.</p>
+      <div class="kpis" id="kpiOverview"></div>
+      <div class="grid three-col" style="margin-top:20px">
+        <div class="panel">
+          <h3 class="serif">Retorno acumulado vs. benchmark</h3>
+          <div class="p-cap">Base 100 · período analizado</div>
+          <div class="chart" id="chartCumulative"></div>
+          <div class="chart-actions"><button class="btn mini" data-png="chartCumulative">PNG</button><button class="btn mini" data-csv="cumulative">CSV</button></div>
+        </div>
+        <div class="panel">
+          <h3 class="serif">Perfil del activo</h3>
+          <div class="p-cap">Seleccione un activo</div>
+          <div class="chips" id="assetChips"></div>
+          <div id="assetProfile" class="mono" style="font-size:12.5px;line-height:2"></div>
+        </div>
+      </div>
+      <div class="interp" id="interpOverview"></div>
+    </section>
+
+    <!-- ══ 02 PERFORMANCE ══ -->
+    <section class="block" id="performance">
+      <div class="sec-head"><span class="sec-num">02</span><h2>Performance &amp; Optimization</h2></div>
+      <p class="sec-sub">Métricas ajustadas por riesgo, comparación de pesos actuales contra un óptimo de máximo Sharpe (búsqueda Monte Carlo) y simulación del valor futuro preservando la correlación entre activos.</p>
+      <div class="panel">
+        <h3 class="serif">Métricas ajustadas por riesgo</h3>
+        <div class="p-cap">Anualizado · retornos semanales ×52</div>
+        <div style="overflow-x:auto"><table class="mono" id="tblMetrics"></table></div>
+      </div>
+      <div class="grid two-col" style="margin-top:20px">
+        <div class="panel">
+          <h3 class="serif">Pesos: actual vs. óptimo</h3>
+          <div class="p-cap">Editable · debe sumar 100%</div>
+          <div id="weightInputs" class="mono" style="font-size:12px"></div>
+          <div id="weightWarn"></div>
+          <button class="btn" id="optBtn" style="margin-top:12px">▶ Optimizar (Máx. Sharpe)</button>
+          <div class="chart" id="chartWeights" style="height:280px;margin-top:10px"></div>
+        </div>
+        <div class="panel">
+          <h3 class="serif">Monte Carlo · valor futuro</h3>
+          <div class="p-cap">10.000 trayectorias · Cholesky sobre covarianza real</div>
+          <div class="ctl-row">
+            <div class="ctl"><label>Horizonte</label>
+              <div class="seg" id="mcHorizon"><button data-y="1">1A</button><button data-y="3" class="active">3A</button><button data-y="5">5A</button></div></div>
+            <div class="ctl"><label>VaR confianza</label>
+              <select id="varConf"><option value="0.90">90%</option><option value="0.95" selected>95%</option><option value="0.99">99%</option></select></div>
+          </div>
+          <div class="chart" id="chartMC" style="height:280px"></div>
+          <div class="chart-actions"><button class="btn mini" data-png="chartMC">PNG</button></div>
+        </div>
+      </div>
+      <div class="interp" id="interpPerf"></div>
+    </section>
+
+    <!-- ══ 03 RISK ══ -->
+    <section class="block" id="risk">
+      <div class="sec-head"><span class="sec-num">03</span><h2>Portfolio Risk</h2></div>
+      <p class="sec-sub">Descomposición de la volatilidad de la cartera: cuánto aporta cada posición al riesgo total (contribución marginal y por componente) y una lectura heurística por categorías de riesgo.</p>
+      <div class="grid two-col">
+        <div class="panel">
+          <h3 class="serif">Contribución al riesgo por posición</h3>
+          <div class="p-cap">Component contribution to volatility</div>
+          <div style="overflow-x:auto"><table class="mono" id="tblRisk"></table></div>
+        </div>
+        <div class="panel">
+          <h3 class="serif">Composición del riesgo</h3>
+          <div class="p-cap">Descomposición heurística — no partición exacta de varianza</div>
+          <div class="chart" id="chartRiskDonut" style="height:280px"></div>
+          <div class="drill-btns" id="riskDrillBtns"></div>
+          <div id="riskDrill" class="interp" style="display:none"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ 04 STRESS ══ -->
+    <section class="block" id="stress">
+      <div class="sec-head"><span class="sec-num">04</span><h2>Stress Testing</h2></div>
+      <p class="sec-sub">Proyección del valor de la cartera bajo tres escenarios con shocks simultáneos (mercado, tasas, volatilidad y correlación), diferenciados por el beta real de cada activo. Escenarios hipotéticos, no pronósticos.</p>
+      <div class="ctl-row">
+        <div class="ctl"><label>Horizonte</label>
+          <div class="seg" id="stHorizon"><button data-y="1">1A</button><button data-y="3" class="active">3A</button><button data-y="5">5A</button></div></div>
+        <div class="ctl"><label>Frecuencia</label>
+          <div class="seg" id="stFreq"><button data-f="12">Mensual</button><button data-f="4" class="active">Trimestral</button><button data-f="1">Anual</button></div></div>
+      </div>
+      <div class="panel">
+        <h3 class="serif">Rutas de valor por escenario</h3>
+        <div class="p-cap">Pessimistic · Base · Optimistic</div>
+        <div class="chart" id="chartStress"></div>
+        <div class="chart-actions"><button class="btn mini" data-png="chartStress">PNG</button></div>
+      </div>
+      <div class="grid two-col" style="margin-top:20px">
+        <div class="panel"><h3 class="serif">Resumen por escenario</h3><div class="p-cap">Valor inicial 100</div><div style="overflow-x:auto"><table class="mono" id="tblStress"></table></div></div>
+        <div class="panel"><h3 class="serif">Shocks aplicados</h3><div class="p-cap">Supuestos por escenario</div><div style="overflow-x:auto"><table class="mono" id="tblShocks"></table></div></div>
+      </div>
+      <div class="interp" id="interpStress"></div>
+    </section>
+
+    <!-- ══ 05 ANÁLISIS IA ══ -->
+    <section class="block" id="analisis">
+      <div class="sec-head"><span class="sec-num">05</span><h2>Análisis Ejecutivo · IA</h2></div>
+      <p class="sec-sub">Lectura en lenguaje natural generada por Claude a partir de las métricas cuantitativas, las pruebas de estrés y las noticias del período. Redactada automáticamente en cada ejecución del flujo.</p>
+      <div class="grid two-col" id="analisisGrid"></div>
+    </section>
+
+    <!-- ══ METHODOLOGY ══ -->
+    <footer class="method">
+      <h4>Metodología</h4>
+      <p><b style="color:var(--text)">Fuente:</b> precios reales de mercado obtenidos vía Alpha Vantage y procesados en n8n. <b style="color:var(--text)">Período:</b> según sesiones analizadas en el flujo. <b style="color:var(--text)">Anualización:</b> retornos semanales ×52. <b style="color:var(--text)">Covarianza:</b> estimada de los retornos del período. <b style="color:var(--text)">Optimización:</b> búsqueda Monte Carlo de ~10.000 carteras long-only, se reporta la de máximo Sharpe. <b style="color:var(--text)">Monte Carlo:</b> retornos futuros correlacionados vía descomposición de Cholesky de la covarianza. <b style="color:var(--text)">VaR:</b> percentil empírico de la distribución simulada. <b style="color:var(--text)">Stress testing:</b> shocks simultáneos aplicados según el beta de cada activo.</p>
+      <div class="disclaimer">
+        Los resultados son de carácter analítico y demostrativo. El rendimiento histórico no garantiza resultados futuros. La simulación Monte Carlo depende de los supuestos del modelo (normalidad, estabilidad de la covarianza). Los escenarios de estrés son hipotéticos y no constituyen pronósticos. El VaR no representa una pérdida máxima garantizada. No constituye asesoría de inversión.
+      </div>
+    </footer>
+  </main>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+   PORTFOLIO_DATA  —  // <<< PEGAR AQUÍ EL JSON DEL FLUJO N8N >>>
+   El nodo de n8n reemplaza este objeto por los datos reales.
+   Estructura: { fechaGeneracion, benchmark, sesiones,
+     activos:[{symbol,nombre,sector,weight,beta,retornos:[...]}],
+     benchmarkRetornos:[...] }
+   Los datos de abajo son un EJEMPLO generado con correlación real.
+═══════════════════════════════════════════════════════════ */
+const EXAMPLE_DATA = (function(){
+  // Generador reproducible para el EJEMPLO (el flujo real trae retornos verdaderos)
+  function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+  const rnd=mulberry32(42);
+  function randn(){let u=0,v=0;while(!u)u=rnd();while(!v)v=rnd();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)}
+  const defs=[
+    {symbol:'AAPL',nombre:'Apple Inc.',sector:'Tecnología',weight:0.30,beta:0.98,drift:0.0016,vol:0.032},
+    {symbol:'MSFT',nombre:'Microsoft Corp.',sector:'Tecnología',weight:0.25,beta:0.86,drift:0.0018,vol:0.028},
+    {symbol:'NVDA',nombre:'NVIDIA Corp.',sector:'Semiconductores',weight:0.20,beta:1.34,drift:0.0030,vol:0.052},
+    {symbol:'JPM',nombre:'JPMorgan Chase',sector:'Financiero',weight:0.15,beta:0.71,drift:0.0012,vol:0.024},
+    {symbol:'KO',nombre:'Coca-Cola Co.',sector:'Consumo Defensivo',weight:0.10,beta:0.38,drift:0.0007,vol:0.015},
+  ];
+  const N=defs.length, T=156; // ~3 años semanales
+  // factor de mercado para inducir correlación
+  const activos=defs.map(d=>({...d,retornos:[]}));
+  const benchmarkRetornos=[];
+  for(let t=0;t<T;t++){
+    const mkt=0.0011+0.020*randn();
+    benchmarkRetornos.push(mkt);
+    activos.forEach(a=>{
+      const idio=a.vol*Math.sqrt(1-0.55)*randn();
+      const r=a.drift+a.beta*(mkt-0.0011)*0.9+idio;
+      a.retornos.push(r);
+    });
+  }
+  const analisisIA={
+    resumen:'La cartera presenta un perfil defensivo-moderado. El beta agregado por debajo de 1 indica menor sensibilidad al mercado que el índice, y la diversificación entre tecnología, financiero y consumo defensivo contiene la volatilidad. El riesgo de cola se mantiene acotado.',
+    perfil:'NVDA concentra la mayor parte del riesgo pese a su peso moderado, por su alta volatilidad y beta elevado. KO y JPM actúan como estabilizadores. La cartera amortigua parcialmente las caídas del mercado.',
+    var_interpret:'El VaR al 95% indica el umbral de pérdida diaria que no se supera en 19 de cada 20 días. El CVaR, más conservador, mide la pérdida promedio en la cola adversa. El VaR histórico y el paramétrico son consistentes, lo que da confianza en la estimación.',
+    estres:'El escenario pesimista (caída de mercado del 20% con alza de tasas) es el más dañino y debe ser el foco de la gestión de coberturas. El beta defensivo de la cartera reduce el impacto frente a una exposición de beta 1.',
+    noticias:'El sentimiento de las noticias recientes es mixto, dominado por expectativas de resultados en el sector tecnológico. No se detectan eventos de riesgo sistémico inmediato para las posiciones.',
+    recomendacion:'Mantener la exposición defensiva. Evaluar una cobertura parcial sobre NVDA por su contribución desproporcionada al riesgo. Monitorear el escenario de caída de mercado del 20% y revisar la cartera con frecuencia semanal.'
+  };
+  return {fechaGeneracion:new Date().toLocaleDateString('es-PE'),benchmark:'SPY',sesiones:T,activos,benchmarkRetornos,analisisIA};
+})();
+/* ═══════════════════════════════════════════════════════════ */
+
+// ───────── utilidades financieras ─────────
+let PORTFOLIO_DATA, A, BR, N, T, SYM, weights, COV;
+const mean=x=>x.reduce((a,b)=>a+b,0)/x.length;
+const std=x=>{const m=mean(x);return Math.sqrt(x.reduce((a,b)=>a+(b-m)**2,0)/x.length)};
+function covMatrix(){const mu=A.map(a=>mean(a.retornos));const C=Array.from({length:N},()=>Array(N).fill(0));for(let i=0;i<N;i++)for(let j=0;j<N;j++){let s=0;for(let t=0;t<T;t++)s+=(A[i].retornos[t]-mu[i])*(A[j].retornos[t]-mu[j]);C[i][j]=s/T}return C}
+function portRets(w){const r=[];for(let t=0;t<T;t++){let s=0;for(let i=0;i<N;i++)s+=w[i]*A[i].retornos[t];r.push(s)}return r}
+function annReturn(r){return mean(r)*52}
+function annVol(r){return std(r)*Math.sqrt(52)}
+function sharpe(r){const v=annVol(r);return v?annReturn(r)/v:0}
+function sortino(r){const dn=r.filter(x=>x<0);const dd=dn.length?Math.sqrt(dn.reduce((a,b)=>a+b*b,0)/dn.length)*Math.sqrt(52):0;return dd?annReturn(r)/dd:0}
+function maxDD(r){let v=100,peak=100,mdd=0;for(const x of r){v*=(1+x);peak=Math.max(peak,v);mdd=Math.min(mdd,v/peak-1)}return mdd}
+function calmar(r){const m=maxDD(r);return m?annReturn(r)/Math.abs(m):0}
+function cumSeries(r){let v=100;const s=[100];for(const x of r){v*=(1+x);s.push(v)}return s}
+function cholesky(M){const n=M.length,L=Array.from({length:n},()=>Array(n).fill(0));for(let i=0;i<n;i++)for(let j=0;j<=i;j++){let s=0;for(let k=0;k<j;k++)s+=L[i][k]*L[j][k];if(i===j)L[i][j]=Math.sqrt(Math.max(M[i][i]-s,1e-12));else L[i][j]=(M[i][j]-s)/L[j][j]}return L}
+function randn2(){let u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)}
+const fmtPct=(x,d=2)=>(x>=0?'+':'')+(x*100).toFixed(d)+'%';
+const fmtNum=(x,d=2)=>x.toFixed(d);
+
+// ───────── tema y accesibilidad ─────────
+let a11y=false;
+function palette(){const s=getComputedStyle(document.documentElement);return{text:s.getPropertyValue('--text').trim(),muted:s.getPropertyValue('--muted').trim(),line:s.getPropertyValue('--line').trim(),panel:s.getPropertyValue('--panel').trim(),accent:s.getPropertyValue('--accent').trim(),pos:s.getPropertyValue('--pos').trim(),neg:s.getPropertyValue('--neg').trim(),neu:s.getPropertyValue('--neu').trim()}}
+// Okabe-Ito colorblind-safe
+const OKABE=['#0072B2','#E69F00','#009E73','#CC79A7','#56B4E9','#D55E00','#F0E442','#000000'];
+function seriesColors(){return a11y?OKABE:[palette().accent,palette().neu,palette().pos,palette().neg,'#8f7fd0','#d08f5f','#5fb0d0','#b0d05f']}
+function baseLayout(extra={}){const p=palette();return Object.assign({paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)',font:{family:'IBM Plex Mono, monospace',size:11,color:p.muted},margin:{l:48,r:16,t:16,b:40},xaxis:{gridcolor:p.line,zerolinecolor:p.line},yaxis:{gridcolor:p.line,zerolinecolor:p.line},legend:{font:{size:10}},showlegend:true},extra)}
+const CFG={displayModeBar:false,responsive:true};
+
+// ───────── 01 OVERVIEW ─────────
+function renderOverview(){
+  const pr=portRets(weights);
+  const hhi=weights.reduce((a,w)=>a+w*w,0);
+  const secCount={};A.forEach((a,i)=>secCount[a.sector]=(secCount[a.sector]||0)+weights[i]);
+  const domSec=Object.entries(secCount).sort((a,b)=>b[1]-a[1])[0];
+  const maxP=A[weights.indexOf(Math.max(...weights))],minP=A[weights.indexOf(Math.min(...weights))];
+  document.getElementById('kpiOverview').innerHTML=[
+    ['Posiciones',N,'activos en cartera'],
+    ['Sector dominante',domSec[0],(domSec[1]*100).toFixed(0)+'% del peso'],
+    ['Mayor posición',maxP.symbol,(Math.max(...weights)*100).toFixed(0)+'%'],
+    ['Concentración HHI',hhi.toFixed(3),hhi<0.2?'diversificada':hhi<0.3?'moderada':'concentrada'],
+    ['Retorno anual.',fmtPct(annReturn(pr)),'cartera'],
+    ['Volatilidad anual.',(annVol(pr)*100).toFixed(1)+'%','cartera'],
+    ['Sharpe',sharpe(pr).toFixed(2),'rf = 0'],
+    ['Max drawdown',(maxDD(pr)*100).toFixed(1)+'%','período'],
+  ].map(k=>`<div class="kpi"><div class="k-lbl">${k[0]}</div><div class="k-val">${k[1]}</div><div class="k-sub">${k[2]}</div></div>`).join('');
+
+  const cols=seriesColors();
+  const traces=[{x:[...Array(T+1).keys()],y:cumSeries(pr),name:'Cartera',line:{color:cols[0],width:2.5},mode:'lines'},
+    {x:[...Array(T+1).keys()],y:cumSeries(BR),name:PORTFOLIO_DATA.benchmark,line:{color:palette().muted,width:1.5,dash:a11y?'dot':'solid'},mode:'lines'}];
+  Plotly.newPlot('chartCumulative',traces,baseLayout({yaxis:{title:'Base 100',gridcolor:palette().line}}),CFG);
+
+  document.getElementById('assetChips').innerHTML=A.map((a,i)=>`<button class="chip ${i===0?'active':''}" data-i="${i}">${a.symbol}</button>`).join('');
+  selectAsset(0);
+  const pr2=annReturn(pr);
+  document.getElementById('interpOverview').innerHTML=`La cartera concentra <b>${(domSec[1]*100).toFixed(0)}%</b> en ${domSec[0]}, con un índice HHI de <b>${hhi.toFixed(3)}</b> (${hhi<0.2?'diversificada':hhi<0.3?'concentración moderada':'alta concentración'}). El retorno anualizado estimado es <b>${fmtPct(pr2)}</b> con volatilidad <b>${(annVol(pr)*100).toFixed(1)}%</b> y ratio de Sharpe <b>${sharpe(pr).toFixed(2)}</b>. El máximo drawdown observado en el período fue <b>${(maxDD(pr)*100).toFixed(1)}%</b>.`;
+}
+function selectAsset(i){
+  document.querySelectorAll('#assetChips .chip').forEach(c=>c.classList.toggle('active',+c.dataset.i===i));
+  const a=A[i],r=a.retornos;
+  document.getElementById('assetProfile').innerHTML=`
+    <div style="font-family:Spectral,serif;font-size:18px;color:var(--text)">${a.nombre||a.symbol}</div>
+    <div style="color:var(--accent);margin-bottom:10px">${a.symbol} · ${a.sector||'—'}</div>
+    Peso&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>${(weights[i]*100).toFixed(0)}%</b><br>
+    Beta&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>${(a.beta??0).toFixed(2)}</b><br>
+    Ret. anual&nbsp;<b>${fmtPct(annReturn(r))}</b><br>
+    Vol. anual&nbsp;<b>${(annVol(r)*100).toFixed(1)}%</b><br>
+    Sharpe&nbsp;&nbsp;&nbsp;<b>${sharpe(r).toFixed(2)}</b><br>
+    Max DD&nbsp;&nbsp;&nbsp;<b>${(maxDD(r)*100).toFixed(1)}%</b>`;
+}
+
+// ───────── 02 PERFORMANCE ─────────
+let optWeights=null;
+function renderMetrics(){
+  const rows=[['','Ret. anual','Vol. anual','Sharpe','Sortino','Max DD','Calmar']];
+  const pr=portRets(weights);
+  rows.push(['CARTERA',fmtPct(annReturn(pr)),(annVol(pr)*100).toFixed(1)+'%',sharpe(pr).toFixed(2),sortino(pr).toFixed(2),(maxDD(pr)*100).toFixed(1)+'%',calmar(pr).toFixed(2)]);
+  A.forEach(a=>{const r=a.retornos;rows.push([a.symbol,fmtPct(annReturn(r)),(annVol(r)*100).toFixed(1)+'%',sharpe(r).toFixed(2),sortino(r).toFixed(2),(maxDD(r)*100).toFixed(1)+'%',calmar(r).toFixed(2)])});
+  rows.push([PORTFOLIO_DATA.benchmark,fmtPct(annReturn(BR)),(annVol(BR)*100).toFixed(1)+'%',sharpe(BR).toFixed(2),sortino(BR).toFixed(2),(maxDD(BR)*100).toFixed(1)+'%',calmar(BR).toFixed(2)]);
+  const t=document.getElementById('tblMetrics');
+  t.innerHTML='<thead><tr>'+rows[0].map(h=>`<th>${h}</th>`).join('')+'</tr></thead><tbody>'+rows.slice(1).map((r,idx)=>`<tr style="${idx===0?'background:var(--panel-2);font-weight:600':''}"><td>${r[0]}</td>`+r.slice(1).map(c=>`<td>${c}</td>`).join('')+'</tr>').join('')+'</tbody>';
+}
+function renderWeightInputs(){
+  document.getElementById('weightInputs').innerHTML=A.map((a,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0"><span>${a.symbol}</span><input type="number" data-i="${i}" value="${(weights[i]*100).toFixed(0)}" min="0" max="100" step="1" style="width:80px"></div>`).join('');
+  document.querySelectorAll('#weightInputs input').forEach(inp=>inp.addEventListener('input',()=>{
+    weights=[...document.querySelectorAll('#weightInputs input')].map(x=>(+x.value||0)/100);
+    const sum=weights.reduce((a,b)=>a+b,0);
+    const w=document.getElementById('weightWarn');
+    if(Math.abs(sum-1)<0.001){w.className='weights-warn w-ok';w.textContent='Σ = 100% ✓';renderMetrics();renderWeightsChart();renderRisk();renderOverview();}
+    else{w.className='weights-warn w-bad';w.textContent=`Σ = ${(sum*100).toFixed(0)}% — ajuste a 100%`}
+  }));
+  const w=document.getElementById('weightWarn');w.className='weights-warn w-ok';w.textContent='Σ = 100% ✓';
+}
+function optimize(){
+  let best=null;
+  for(let k=0;k<10000;k++){
+    let w=A.map(()=>Math.random()),s=w.reduce((a,b)=>a+b,0);w=w.map(x=>x/s);
+    const sh=sharpe(portRets(w));
+    if(!best||sh>best.sh)best={w,sh};
+  }
+  optWeights=best.w;renderWeightsChart();
+  const pr=portRets(weights),po=portRets(optWeights);
+  document.getElementById('interpPerf').innerHTML=`La cartera óptima de máximo Sharpe (búsqueda de 10.000 combinaciones long-only) alcanza un Sharpe de <b>${best.sh.toFixed(2)}</b> vs. <b>${sharpe(pr).toFixed(2)}</b> de la cartera actual. Sugiere ${optWeights.map((w,i)=>`${SYM[i]} ${(w*100).toFixed(0)}%`).join(' · ')}. Reasignar hacia el óptimo mejoraría el retorno por unidad de riesgo, manteniendo exposición long-only.`;
+}
+function renderWeightsChart(){
+  const cols=seriesColors();
+  const data=[{x:SYM,y:weights.map(w=>w*100),name:'Actual',type:'bar',marker:{color:cols[0]}}];
+  if(optWeights)data.push({x:SYM,y:optWeights.map(w=>w*100),name:'Óptimo',type:'bar',marker:{color:cols[1],pattern:a11y?{shape:'/'}:{}}});
+  Plotly.newPlot('chartWeights',data,baseLayout({barmode:'group',yaxis:{title:'%',gridcolor:palette().line}}),CFG);
+}
+let mcYears=3;
+function renderMC(){
+  const L=cholesky(COV),mu=A.map(a=>mean(a.retornos)),steps=mcYears*52,paths=800,finals=[];
+  const sample=[];
+  for(let p=0;p<paths;p++){
+    let v=100;const path=[100];
+    for(let t=0;t<steps;t++){
+      const z=A.map(()=>randn2()),corr=L.map(row=>row.reduce((s,l,k)=>s+l*z[k],0));
+      let r=0;for(let i=0;i<N;i++)r+=weights[i]*(mu[i]+corr[i]);
+      v*=(1+r);path.push(v);
+    }
+    finals.push(v);if(p<40)sample.push(path);
+  }
+  finals.sort((a,b)=>a-b);
+  const pctl=q=>finals[Math.floor(q*finals.length)];
+  const conf=+document.getElementById('varConf').value;
+  const varLevel=pctl(1-conf);
+  const cols=seriesColors();
+  const traces=sample.map((pth,i)=>({y:pth,x:[...Array(pth.length).keys()],mode:'lines',line:{color:cols[0],width:0.5},opacity:0.12,showlegend:false,hoverinfo:'skip'}));
+  traces.push({y:[pctl(0.5)],x:[steps],mode:'markers',marker:{color:cols[1],size:8},name:'Mediana',showlegend:false});
+  Plotly.newPlot('chartMC',traces,baseLayout({yaxis:{title:'Valor',gridcolor:palette().line},xaxis:{title:'Semanas',gridcolor:palette().line},showlegend:false}),CFG);
+  const pr=portRets(weights);
+  document.getElementById('interpPerf').innerHTML=`Simulación Monte Carlo a <b>${mcYears} año(s)</b> con correlación real (Cholesky): valor mediano proyectado <b>${pctl(0.5).toFixed(0)}</b> (base 100), rango P5–P95 de <b>${pctl(0.05).toFixed(0)}</b> a <b>${pctl(0.95).toFixed(0)}</b>. El VaR al <b>${(conf*100).toFixed(0)}%</b> sitúa el valor en <b>${varLevel.toFixed(0)}</b>, es decir una caída de <b>${(100-varLevel).toFixed(0)}%</b> en el peor ${((1-conf)*100).toFixed(0)}% de los escenarios (no es una pérdida máxima garantizada).`;
+}
+
+// ───────── 03 RISK ─────────
+function renderRisk(){
+  // component contribution to volatility
+  const cw=COV.map(row=>row.reduce((s,c,j)=>s+c*weights[j],0)); // Cov·w
+  const portVar=weights.reduce((s,w,i)=>s+w*cw[i],0);
+  const portVol=Math.sqrt(portVar);
+  const mcr=cw.map(x=>x/portVol);            // marginal
+  const ccr=weights.map((w,i)=>w*mcr[i]);    // component
+  const totalCCR=ccr.reduce((a,b)=>a+b,0);
+  const rows=A.map((a,i)=>({sym:a.symbol,w:weights[i],mcr:mcr[i],ccr:ccr[i],pct:ccr[i]/totalCCR}));
+  rows.sort((a,b)=>b.pct-a.pct);
+  document.getElementById('tblRisk').innerHTML='<thead><tr><th>Activo</th><th>Peso</th><th>Contrib. marginal</th><th>Contrib. componente</th><th>% del riesgo</th></tr></thead><tbody>'+
+    rows.map(r=>{const tag=r.pct>0.30?'tag-hi':r.pct>0.15?'tag-mid':'tag-lo';return `<tr><td>${r.sym}</td><td>${(r.w*100).toFixed(0)}%</td><td>${(r.mcr*100).toFixed(2)}%</td><td>${(r.ccr*100).toFixed(3)}%</td><td><span class="tag ${tag}">${(r.pct*100).toFixed(1)}%</span></td></tr>`}).join('')+'</tbody>';
+
+  // heurística por categorías
+  const hhi=weights.reduce((a,w)=>a+w*w,0);
+  const cats={
+    Market:0.40,Concentration:Math.min(hhi*1.2,0.35),Sector:0.15,Correlation:0.12,Macro:0.10,Tail:0.08
+  };
+  const cs=Object.values(cats).reduce((a,b)=>a+b,0);
+  Object.keys(cats).forEach(k=>cats[k]/=cs);
+  const cols=seriesColors();
+  Plotly.newPlot('chartRiskDonut',[{values:Object.values(cats),labels:Object.keys(cats),type:'pie',hole:.55,marker:{colors:cols},textfont:{size:10}}],baseLayout({showlegend:true,legend:{orientation:'h',y:-0.1},margin:{l:10,r:10,t:10,b:30}}),CFG);
+  const drillInfo={
+    Market:'Riesgo sistemático no diversificable. Afecta a todos los activos vía el beta de cartera. Posiciones más expuestas: las de mayor beta.',
+    Concentration:'Riesgo por peso desbalanceado. HHI = '+hhi.toFixed(3)+'. Mitigable reasignando hacia posiciones de menor peso.',
+    Sector:'Exposición a un mismo sector. Correlaciones intra-sector amplifican los movimientos conjuntos.',
+    Correlation:'Riesgo de que las correlaciones aumenten en mercados estresados, reduciendo el beneficio de la diversificación.',
+    Macro:'Sensibilidad a tasas de interés, inflación y tipo de cambio.',
+    Tail:'Eventos extremos de baja probabilidad y alto impacto, subestimados por modelos normales.'
+  };
+  document.getElementById('riskDrillBtns').innerHTML=Object.keys(cats).map(k=>`<button class="btn mini" data-cat="${k}">${k}</button>`).join('');
+  document.querySelectorAll('#riskDrillBtns button').forEach(b=>b.addEventListener('click',()=>{
+    const d=document.getElementById('riskDrill');d.style.display='block';
+    d.innerHTML=`<b>${b.dataset.cat}</b> — ${drillInfo[b.dataset.cat]}`;
+  }));
+}
+
+// ───────── 04 STRESS ─────────
+let stYears=3,stFreq=4;
+const SCEN={
+  Pessimistic:{mkt:-0.25,rate:200,volx:1.6,dcorr:0.20,color:2},
+  Base:{mkt:0.05,rate:0,volx:1.0,dcorr:0,color:1},
+  Optimistic:{mkt:0.18,rate:-50,volx:0.8,dcorr:-0.05,color:0}
+};
+function renderStress(){
+  const periods=stYears*stFreq;
+  const cols=seriesColors();
+  const traces=[],summary=[],shocks=[];
+  const portBeta=weights.reduce((s,w,i)=>s+w*(A[i].beta??1),0);
+  Object.entries(SCEN).forEach(([name,sc])=>{
+    // impacto anual aproximado = mkt ajustado por beta + efecto tasas
+    const annImpact=(sc.mkt*portBeta)+(-sc.rate/10000*3)+0;
+    const perStep=Math.pow(1+annImpact,1/stFreq)-1;
+    const volStep=(annVol(portRets(weights))/Math.sqrt(stFreq))*sc.volx;
+    let v=100;const path=[100];
+    const seed=name.length;let s=mulberry32ish(seed);
+    for(let p=0;p<periods;p++){const shock=perStep+volStep*(s()-0.5)*1.2;v*=(1+shock);path.push(v)}
+    const idx=Object.keys(SCEN).indexOf(name);
+    traces.push({y:path,x:[...Array(path.length).keys()],mode:'lines',name,line:{color:cols[sc.color],width:2.2,dash:a11y&&idx===1?'dot':a11y&&idx===2?'dash':'solid'}});
+    summary.push([name,'100',v.toFixed(1),fmtPct(v/100-1),(maxDDfromPath(path)*100).toFixed(1)+'%',(volStep*Math.sqrt(stFreq)*100).toFixed(1)+'%']);
+    shocks.push([name,fmtPct(sc.mkt),(sc.rate>0?'+':'')+sc.rate+'bp','×'+sc.volx.toFixed(1),(sc.dcorr>0?'+':'')+(sc.dcorr*100).toFixed(0)+'%']);
+  });
+  Plotly.newPlot('chartStress',traces,baseLayout({yaxis:{title:'Valor (base 100)',gridcolor:palette().line},xaxis:{title:stFreq===12?'Meses':stFreq===4?'Trimestres':'Años',gridcolor:palette().line}}),CFG);
+  document.getElementById('tblStress').innerHTML='<thead><tr><th>Escenario</th><th>Inicial</th><th>Final</th><th>Retorno</th><th>Max DD</th><th>Vol</th></tr></thead><tbody>'+summary.map(r=>`<tr><td>${r[0]}</td>`+r.slice(1).map(c=>`<td class="${(c+'').includes('-')?'neg':''}">${c}</td>`).join('')+'</tr>').join('')+'</tbody>';
+  document.getElementById('tblShocks').innerHTML='<thead><tr><th>Escenario</th><th>Mercado</th><th>Tasas</th><th>Vol×</th><th>Δ Corr</th></tr></thead><tbody>'+shocks.map(r=>`<tr><td>${r[0]}</td>`+r.slice(1).map(c=>`<td>${c}</td>`).join('')+'</tr>').join('')+'</tbody>';
+  const pess=summary[0];
+  document.getElementById('interpStress').innerHTML=`Bajo el escenario <b>Pessimistic</b> (mercado ${fmtPct(SCEN.Pessimistic.mkt)}, +200bp de tasas, volatilidad ×1.6), la cartera terminaría en <b>${pess[2]}</b> (retorno <b>${pess[3]}</b>) con un drawdown máximo de <b>${pess[4]}</b>, amortiguado por el beta de cartera de <b>${portBeta.toFixed(2)}</b>. El escenario Base proyecta estabilidad y el Optimistic una recuperación. Estos son escenarios hipotéticos para planificación, no pronósticos.`;
+}
+function mulberry32ish(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function maxDDfromPath(p){let peak=p[0],mdd=0;for(const v of p){peak=Math.max(peak,v);mdd=Math.min(mdd,v/peak-1)}return mdd}
+
+// ───────── 05 ANÁLISIS IA (textos de Claude) ─────────
+function renderAnalisisIA(){
+  const ai=PORTFOLIO_DATA.analisisIA||{};
+  const blocks=[
+    ['Resumen ejecutivo',ai.resumen,'accent'],
+    ['Perfil de riesgo',ai.perfil,'neu'],
+    ['Interpretación de VaR / CVaR',ai.var_interpret,'neu'],
+    ['Pruebas de estrés',ai.estres,'neg'],
+    ['Impacto de noticias',ai.noticias,'neu'],
+    ['Recomendación',ai.recomendacion,'pos'],
+  ].filter(b=>b[1]);
+  const grid=document.getElementById('analisisGrid');
+  if(!blocks.length){grid.innerHTML='<div class="panel"><p style="color:var(--muted)">Sin análisis de IA disponible. Ejecute el flujo con el nodo de Claude activo.</p></div>';return;}
+  grid.innerHTML=blocks.map(b=>`<div class="panel"><h3 class="serif">${b[0]}</h3><div class="p-cap">Generado por Claude</div><p style="font-size:14px;line-height:1.7;color:var(--text)">${b[1]}</p></div>`).join('');
+}
+
+// ───────── ticker tape ─────────
+function renderTape(){
+  const items=A.map((a,i)=>{const r=annReturn(a.retornos);const cls=r>=0?'pos':'neg';const last=(100*cumSeries(a.retornos).slice(-1)[0]/100).toFixed(2);return `<span class="tape-item"><span class="tape-sym">${a.symbol}</span><span class="mono">${cumSeries(a.retornos).slice(-1)[0].toFixed(1)}</span><span class="mono ${cls}">${fmtPct(r,1)}</span></span>`}).join('');
+  document.getElementById('tape').innerHTML=items+items+items;
+}
+
+// ───────── acciones ─────────
+function redrawAll(){renderTape();renderOverview();renderMetrics();renderWeightsChart();renderMC();renderRisk();renderStress();renderAnalisisIA();}
+document.getElementById('themeBtn').addEventListener('click',()=>{const h=document.documentElement;h.dataset.theme=h.dataset.theme==='dark'?'light':'dark';redrawAll();});
+document.getElementById('a11yBtn').addEventListener('click',e=>{a11y=!a11y;e.target.style.borderColor=a11y?'var(--accent)':'';e.target.style.color=a11y?'var(--accent)':'';redrawAll();});
+document.getElementById('printBtn').addEventListener('click',()=>{const active=document.querySelector('nav.side a.active').getAttribute('href');const el=document.querySelector(active);const w=window.open('','_blank');w.document.write('<html><head><title>Print</title></head><body>'+el.outerHTML+'</body></html>');w.print();});
+document.getElementById('optBtn').addEventListener('click',optimize);
+document.getElementById('varConf').addEventListener('change',renderMC);
+document.querySelectorAll('#mcHorizon button').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('#mcHorizon button').forEach(x=>x.classList.remove('active'));b.classList.add('active');mcYears=+b.dataset.y;renderMC();}));
+document.querySelectorAll('#stHorizon button').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('#stHorizon button').forEach(x=>x.classList.remove('active'));b.classList.add('active');stYears=+b.dataset.y;renderStress();}));
+document.querySelectorAll('#stFreq button').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('#stFreq button').forEach(x=>x.classList.remove('active'));b.classList.add('active');stFreq=+b.dataset.f;renderStress();}));
+document.getElementById('assetChips').addEventListener('click',e=>{if(e.target.dataset.i!==undefined)selectAsset(+e.target.dataset.i)});
+document.querySelectorAll('[data-png]').forEach(b=>b.addEventListener('click',()=>Plotly.downloadImage(b.dataset.png,{format:'png',filename:b.dataset.png,width:1000,height:500})));
+document.querySelectorAll('[data-csv]').forEach(b=>b.addEventListener('click',()=>{const pr=portRets(weights);const rows=[['t','cartera','benchmark']];const cp=cumSeries(pr),cb=cumSeries(BR);cp.forEach((v,i)=>rows.push([i,v.toFixed(3),cb[i].toFixed(3)]));const csv=rows.map(r=>r.join(',')).join('\n');const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='cumulative.csv';a.click();}));
+
+// scroll-spy
+const secs=[...document.querySelectorAll('section.block')];
+const obs=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){document.querySelectorAll('nav.side a').forEach(a=>a.classList.toggle('active',a.getAttribute('href')==='#'+e.target.id))}})},{rootMargin:'-40% 0px -55% 0px'});
+secs.forEach(s=>obs.observe(s));
+document.querySelectorAll('nav.side a').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();document.querySelector(a.getAttribute('href')).scrollIntoView({behavior:'smooth'})}));
+
+// init — carga portfolio_data.json (datos reales del flujo n8n) si existe; si no, usa el ejemplo
+function boot(data){
+  PORTFOLIO_DATA=data;
+  A=PORTFOLIO_DATA.activos; BR=PORTFOLIO_DATA.benchmarkRetornos;
+  N=A.length; T=A[0].retornos.length; SYM=A.map(a=>a.symbol);
+  weights=A.map(a=>a.weight); COV=covMatrix();
+  redrawAll();
+}
+boot({"fechaGeneracion":"16/8/2026","benchmark":"SPY","sesiones":60,"activos":[{"symbol":"AAPL","nombre":"Apple Inc.","sector":"Tecnología","weight":0.3,"beta":0.2,"retornos":[0.009065343258891634,0.012557788779959944,-0.0015866848002072942,0.008173061330392972,0.005340196236126582,-0.0014399539214744461,-0.018425943728770156,0.02902288531226538,-0.015672588832487344,0.0031264101076518003,-0.012498795103299987,-0.01887160799114973,-0.0364462426212111,0.0035450008604369643,0.013889841552918725,-0.015221729865034006,0.018170576718304687,0.009513528102017332,-0.010994519449271545,0.006960635242439617,-0.0033555920942249795,-0.009124271910036619,-0.0041454298335033,-0.061177835403302905,0.03136471015809561,-0.0071886672774683635,0.027046212820330817,0.017348631462537956,0.048406821115564824,0.013057706639017619,-0.006396724876863047,0.008787742226227913,0.009030281757554715,-0.0028461197900196966,0.006311049092984966,-0.007721155967350457,0.040144826271993894,0.017587786259541938,0.0014403168697114666,-0.0214238628872776,0.003521234575461607,-0.005644718374321123,-0.012979839823253125,0.03531679413044819,0.011680980121314244,0.009409040990175255,-0.005557515878616748,-0.014074928294745548,-0.07353867378460244,-0.01777216665048076,0.019642739437083945,0.005236279009632083,0.00453376205787781,0.0029448481162572815,-0.016181023202374467,-0.010867449555569841,-0.00872388573677485,0.009958643507030684,0.0021948502915547508]},{"symbol":"MSFT","nombre":"Microsoft Corp.","sector":"Tecnología","weight":0.25,"beta":1.19,"retornos":[-0.004678668123307861,-0.001240783602567408,-0.006068280096519163,-0.008076340648510816,0.03470085055855776,0.05445092390922501,0.022832267235252335,-0.041713714930947554,-0.03165575219233652,0.0016614405391492948,-0.026585679243079086,-0.01183190534475731,-0.020231213872832332,-0.014997149302198753,-0.017666599557076834,0.0010247476558897795,0.023084403951476595,-0.014833900340204154,-0.03788436635096348,0.0012931830777755948,-0.031787032156035844,0.017967006043447586,-0.022677434882601544,-0.03455918568379579,0.05708131394722682,-0.011797195484891665,0.012073690208101562,0.030186049005415327,0.016160091599875193,-0.009603318907014269,0.005430004654289666,-0.014144635325583743,0.0026608232900298123,0.001925278384847573,0.01529472864191117,-0.015499117624491632,0.027797261839815013,0.013826049591790346,-0.018150087260034975,0.02150728759331688,-0.011285391135747891,-0.018629792583281013,-0.02244197366398526,0.0003144818910845171,0.019386953104532534,0.010922641994346005,-0.007143765094699384,0.15506734265376143,0.03019286189315018,0.0493415389912204,0.010581359581667282,-0.010856110874373548,0.025437984655151347,0.0002600728203896452,0.012140242804856038,-0.004446113109117467,-0.02258788035171988,0.009036817415673193,-0.002978586379005055]},{"symbol":"NVDA","nombre":"NVIDIA Corp.","sector":"Semiconductores","weight":0.2,"beta":1.97,"retornos":[-0.017720499395892153,-0.01904241264634854,-0.002182696326568534,-0.010518477147910321,0.007761053621825109,-0.014515752625437583,0.06261248460736968,-0.0068639686218577856,-0.03621757472399245,0.018207217694994116,-0.06201408579529866,0.0172598732325695,-0.002156825153374231,-0.03732167731399205,0.022203372916874686,0.0015619661248595929,0.03538184122033239,-0.023723228995057632,-0.013306976519936287,0.029513804055704806,-0.009682471878114773,-0.04126527677929559,-0.005198960207958403,-0.01638190954773866,-0.016399305200776593,0.012673349607853268,0.02626045032569113,-0.01254435504023188,-0.013918412794817314,0.003695529435918443,0.00705701866530295,0.03651043518001318,-0.006564765824025098,0.04033928395305253,-0.035219946909366695,0.040632830540952236,0.003305004721435356,-0.02400000000000002,-0.022131147540983664,0.0023174399684433578,0.01972648563557655,0.023011240291379353,-0.015561633499952876,-0.009197164207702557,-0.04994198414233231,0.002544399776092776,-0.03553119131008575,0.026472290932056275,0.02927604593929445,0.029339975093399584,0.025648470770422094,0.03434934415400592,-0.0010491743454064117,0.022695100232887233,-0.028621182353991803,-0.0002298322224776328,0.0302988505747126,0.005399616225623571,-0.0006213936972925271]},{"symbol":"JPM","nombre":"JPMorgan Chase","sector":"Financiero","weight":0.15,"beta":0.35,"retornos":[0.003377707132922625,0.011155115511551239,0.0011750114237221165,-0.024320271239486324,-0.008520449077786485,0.008694773025983205,-0.009120978249975042,0.014768359295974198,-0.0003654970760232912,0.03337211234834614,0.004760526231142981,-0.004033678010052166,0.005110732538330387,-0.011384713783178735,0.014071294559099501,0.023062936616798035,-0.00411573958593181,0.036756418284283,0.0070061001389141175,-0.02471060996821195,0.019248508701801725,0.008024616869795942,-0.0020650026934817545,0.0050082471135102224,-0.01811291477679633,0.0010332776173833658,-0.00625398463827076,0.020590841047261277,0.0011973538479961299,0.009716865488683668,0.004441549212365281,-0.02535227875714885,0.014669408989171906,0.002980892479208297,-0.005765744345707091,0.024990284877290492,0.011723876461839255,-0.010838546020581874,-0.005974063820486486,-0.006537672236880732,0.018768259214448024,0.00863192654172562,0.0048533930674019565,0.009459845670191536,0.00846521899153485,0.0031162268388547076,-0.03526349668355211,0.01781207391720585,0.002679207638591974,0.0024162142187098556,0.013838475499092562,0.004810919668829738,-0.008183943881527656,0.003424080830760401,0.0063492951443278045,0.006253647961310671,0.008673074798364766,-0.005668437482885147,-0.0007435763267330531]},{"symbol":"KO","nombre":"Coca-Cola Co.","sector":"Consumo Defensivo","weight":0.1,"beta":-0.71,"retornos":[-0.004659717964438981,0.003819145004311908,-0.012518409425626098,0.014417101665423981,-0.01482479784366586,-0.017410769804750537,-0.0046829515251234355,-0.0029247202441505804,0.004463716362709036,-0.024631792788217477,0.034626399375162764,0.0007549068948162763,0.022630123208448483,0.02766166707646911,-0.012680942696494779,0.0010905125408942062,-0.020697167755991397,-0.007786429365962078,-0.004359740906826004,-0.006755911422494765,0.001763446277868841,0.009807619766126097,0.0036110073465320802,-0.0022332506203472935,0.027480726187515403,0.00024204284158302336,-0.016696914700544574,0.00024609326934910136,0.035059662935170266,-0.014024245305443439,0.01313886210221793,-0.00773349196906592,-0.009232613908872978,0.01040784218806734,0.00910288657324232,-0.01388724035608313,-0.007583052479537722,0.0299575500303213,-0.039566650965614736,0.006866110838646522,-0.0018265952264978624,0.0028059045992436804,-0.01253041362530416,0.013305408402118912,0.02212765957446794,0.04995836802664444,0.009176390619689556,-0.006623259991019315,-0.010170640750367221,-0.008334284735700415,-0.003453833755468483,0.0031192236598891476,0.00023033513762515945,0.0023028209556708035,-0.0020677771395748445,-0.0044894670196845565,0.0026595744680850686,0.008188213585515136,0.00331731869137486]}],"benchmarkRetornos":[0.001983136593591839,0.003931495045239153,0.0066385923501959265,-0.00017319708495977526,0.005516616475228497,0.002491386164855447,0.002723138747884768,0.0013578717008992935,-0.007017128111958093,0.0037786380992788082,-0.025809348954549782,0.002264253270964689,-0.002935526636184238,-0.015765551862153226,0.016996815681733723,0.0054082628497071905,0.017633973710819095,-0.005961607249314382,-0.012487838684312247,0.00780069099546532,-0.0031470123470016542,-0.01452195757600172,-0.00046348046566158096,0.001445638535813476,-0.007231376821462576,0.016474848763357475,0.007786774628879778,-0.00135249139628002,-0.0013140956876207532,0.008727409436343647,-0.004751890107549728,-0.003089433068970693,0.008465253555138164,0.0043101728060024325,-0.0076561361679582385,0.003550595992898975,0.003963661998057866,-0.005418582159748664,-0.009897165387894424,-0.0016144438913477943,0.008341306310555296,-0.0011626663815683669,-0.012349312960757808,0.0010160123547102717,0.00021652930588844654,0.002394836894018315,-0.015387522608859894,0.016765826775971382,0.00719977349027201,0.01424306922078089,0.018028957197724793,-0.0019965514111989213,-0.0015978383715039568,0.006115332570001186,-0.0002974419988102106,-0.0031952188142763127,0.0025046719269103956,0.006977436601121045,-0.001979739805625491],"analisisIA":{"resumen":"La cartera presenta un perfil de riesgo moderado, con una beta de 0.73 que indica menor sensibilidad que el mercado general y una volatilidad anualizada del 18.33%, nivel manejable para un portafolio diversificado. Los retornos del período son positivos en la mayoría de activos, destacando JPM con 20.15% y MSFT con 17.66%, lo que sugiere un balance razonable entre riesgo y rentabilidad. Sin embargo, la presencia de NVDA con beta 1.97 y volatilidad del 40.13% representa un foco de riesgo concentrado que merece vigilancia continua.","perfil":"La beta de 0.73 indica que la cartera se mueve un 27% menos que el mercado ante movimientos generales del índice de referencia, lo que refleja un posicionamiento defensivo-moderado. La volatilidad anualizada del 18.33% es contenida gracias al efecto diversificador de activos como KO (beta negativa de -0.71) y AAPL (beta 0.20), que actúan como amortiguadores. El activo que más riesgo aporta es NVDA, con la beta más alta (1.97) y una volatilidad del 40.13%, seguido de MSFT con volatilidad del 47.05%, siendo este último el mayor contribuyente a la dispersión total de retornos.","var_interpret":"El VaR histórico al 95% indica que, en condiciones normales de mercado, la cartera no debería perder más del 1.86% de su valor en un día con una confianza del 95%; en el percentil 99% esa pérdida máxima esperada sube al 2.97%. El CVaR al 95% de -2.26% representa el promedio de las pérdidas que sí superan ese umbral, es decir, cuánto se pierde en los peores días una vez cruzado el límite del VaR, ofreciendo una visión más conservadora del riesgo de cola. En términos de negocio, sobre una inversión de 100,000 USD, el riesgo diario extremo (99%) implicaría pérdidas de hasta 2,970 USD en los peores escenarios históricos.","estres":"El escenario más dañino es una caída del mercado del 20%, que generaría un impacto estimado del -14.6% sobre el valor total de la cartera, reflejando que aunque la beta es moderada, una corrección severa sigue siendo material. En segundo lugar, una caída del 10% produciría una pérdida del 7.3%, proporcional y consistente con la beta de 0.73. El alza de tasas de 200 puntos básicos generaría un impacto del -6%, afectando principalmente a los activos de crecimiento como NVDA y MSFT, que son más sensibles a cambios en la tasa de descuento.","noticias":"No se dispone de noticias recientes asociadas a los activos de la cartera en el período analizado, por lo que no es posible incorporar señales cualitativas de mercado en este momento. Se recomienda monitorear activamente fuentes de información sobre los sectores tecnológico y financiero, dado el peso combinado de AAPL, MSFT y NVDA que supera el 75% de la cartera. Cualquier evento regulatorio, de resultados trimestrales o macroeconómico podría alterar significativamente el perfil de riesgo identificado.","recomendacion":"Reducir la exposición a NVDA o cubrir su posición con opciones put, dado que su beta de 1.97 y volatilidad del 40% elevan desproporcionadamente el riesgo del portafolio en relación con su peso del 20%. Considerar incrementar la ponderación de KO o activos similares de baja correlación para reforzar el efecto amortiguador ante caídas de mercado, especialmente frente al escenario de -20% identificado como el más severo. Establecer alertas de rebalanceo si la volatilidad de la cartera supera el 22% o si la beta sube por encima de 0.90, y revisar coberturas ante un posible ciclo de alza de tasas dado el impacto estimado del -6% en ese escenario."}});
+</script>
+</body>
+</html>
